@@ -123,10 +123,15 @@ class PracticalIsingFaultDetector:
         
         start_time = time.time()
         
+        # 用于存储每个epoch的预测结果
+        epoch_predictions = []
+        epoch_true_labels = []
+        
         for iteration in range(self.max_iter):
             # 随机选择样本
             sample_idx = np.random.randint(len(X_processed))
             d_sample = d_values[sample_idx]
+            y_sample = y[sample_idx]
             
             # 计算当前能量
             energy = self.compute_energy(self.spins, d_sample)
@@ -138,9 +143,46 @@ class PracticalIsingFaultDetector:
             self.energy_history.append(energy)
             self.spin_history.append(np.sum(self.spins == 1))
             
-            # 打印进度
-            if iteration % 50 == 0 or iteration == self.max_iter - 1:
-                print(f"Iter {iteration:3d}: Energy={energy:.2f}, NormalSensors={np.sum(self.spins==1)}")
+            # 计算当前样本的预测
+            fault_probs = self.compute_fault_probability(self.spins, d_sample)
+            avg_fault_prob = np.mean(fault_probs)
+            is_fault_pred = 1 if avg_fault_prob > 0.5 else 0
+            is_fault_true = 1 if y_sample != 1 else 0
+            
+            # 存储用于epoch报告
+            epoch_predictions.append(is_fault_pred)
+            epoch_true_labels.append(is_fault_true)
+            
+            # 每50次迭代生成详细报告
+            if (iteration) % 100 == 0 or iteration == self.max_iter - 1:
+                print(f"\n{'='*60}")
+                print(f"迭代 {iteration+1} 详细报告")
+                print(f"{'='*60}")
+                
+                # 计算当前epoch的指标
+                accuracy = accuracy_score(epoch_true_labels, epoch_predictions)
+                cm = confusion_matrix(epoch_true_labels, epoch_predictions)
+                
+                print(f"当前迭代范围: {iteration-49}-{iteration}")
+                print(f"样本数量: {len(epoch_predictions)}")
+                print(f"准确率: {accuracy:.4f}")
+                print(f"\n混淆矩阵:")
+                print(cm)
+                if cm.shape == (2, 2):
+                    print(f"TN: {cm[0,0]}, FP: {cm[0,1]}")
+                    print(f"FN: {cm[1,0]}, TP: {cm[1,1]}")
+                
+                print(f"\n分类报告:")
+                print(classification_report(epoch_true_labels, epoch_predictions, 
+                                          target_names=['Normal', 'Fault']))
+                
+                print(f"能量: {energy:.2f}, 正常传感器: {np.sum(self.spins==1)}")
+                print(f"当前样本置信度: {avg_fault_prob:.3f}")
+                print(f"{'='*60}")
+                
+                # 重置epoch数据
+                epoch_predictions = []
+                epoch_true_labels = []
         
         training_time = time.time() - start_time
         print(f"\n训练完成! 耗时: {training_time:.2f}秒")
@@ -212,7 +254,7 @@ def main():
     model = PracticalIsingFaultDetector(
         n_sensors=354,
         temperature=1.0,
-        max_iter=300,
+        max_iter=30000,
         mc_steps=100
     )
     
